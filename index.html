@@ -278,9 +278,55 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 .int-option .io-name{font-size:12px;font-weight:700}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--text);color:#fff;padding:11px 16px;border-radius:var(--rs);font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);z-index:999;opacity:0;transform:translateY(10px);transition:all .25s;pointer-events:none}
 .toast.show{opacity:1;transform:translateY(0)}
+
+/* ── LOGIN ── */
+.login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#0f0f1a 0%,#1e1b4b 50%,#2e1065 100%);z-index:1000;display:flex;align-items:center;justify-content:center}
+.login-screen.hidden{display:none}
+.login-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:40px 44px;width:420px;max-width:92vw;backdrop-filter:blur(20px);box-shadow:0 24px 64px rgba(0,0,0,.4)}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px}
+.login-logo-mark{width:36px;height:36px;background:var(--accent);border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800}
+.login-logo-text{font-size:17px;font-weight:800;color:#fff}
+.login-title{font-size:22px;font-weight:800;color:#fff;margin-bottom:6px;line-height:1.2}
+.login-sub{font-size:13px;color:#a5b4fc;margin-bottom:28px;line-height:1.5}
+.login-field{margin-bottom:16px}
+.login-field label{display:block;font-size:11px;font-weight:700;color:#a5b4fc;letter-spacing:.5px;text-transform:uppercase;margin-bottom:6px}
+.login-input{width:100%;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.12);border-radius:10px;padding:12px 14px;font-family:var(--font);font-size:14px;color:#fff;outline:none;transition:border-color .2s}
+.login-input::placeholder{color:rgba(255,255,255,.3)}
+.login-input:focus{border-color:rgba(139,132,255,.7);background:rgba(255,255,255,.1)}
+.login-input.error{border-color:rgba(248,113,113,.7);animation:shake .3s ease}
+.login-btn{width:100%;padding:13px;background:var(--accent);border:none;border-radius:10px;font-family:var(--font);font-size:14px;font-weight:700;color:#fff;cursor:pointer;transition:all .2s;margin-top:4px}
+.login-btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
+.login-btn:active{transform:translateY(0)}
+.login-error{font-size:12px;color:#fca5a5;margin-top:10px;text-align:center;min-height:18px;font-weight:500}
+.login-footer{margin-top:24px;text-align:center;font-size:11px;color:rgba(165,180,252,.5)}
+.login-user-chip{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:100px;padding:4px 12px 4px 4px;cursor:pointer;transition:all .15s}
+.login-user-chip:hover{background:rgba(255,255,255,.12)}
+.login-user-chip .chip-avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff}
+.login-user-chip .chip-name{font-size:12px;font-weight:600;color:#fff}
+.login-user-chip .chip-out{font-size:11px;color:#a5b4fc}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
 </style>
 </head>
 <body>
+
+<!-- LOGIN SCREEN -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-mark">WS</div>
+      <div class="login-logo-text">Eng Calibration</div>
+    </div>
+    <div class="login-title">Team access only</div>
+    <div class="login-sub">This tool contains confidential performance data. Sign in with your Workstream email to continue.</div>
+    <div class="login-field">
+      <label>Work Email</label>
+      <input class="login-input" type="email" id="loginEmail" placeholder="yourname@workstream.is" onkeydown="if(event.key==='Enter')attemptLogin()">
+    </div>
+    <button class="login-btn" onclick="attemptLogin()">Access Tool →</button>
+    <div class="login-error" id="loginError"></div>
+    <div class="login-footer">Only @workstream.is email addresses are permitted access.</div>
+  </div>
+</div>
 
 <!-- NAV -->
 <nav class="nav">
@@ -293,6 +339,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
   </div>
   <div class="nav-right">
     <span class="nav-pill">🤖 AI-First Mode</span>
+    <div class="login-user-chip" id="userChip" onclick="signOut()" title="Sign out">
+      <div class="chip-avatar" id="userInitials">?</div>
+      <div class="chip-name" id="userName">—</div>
+      <div class="chip-out">Sign out</div>
+    </div>
     <button class="btn btn-secondary btn-sm" onclick="openIntModal()">+ Integration</button>
     <button class="btn btn-secondary btn-sm" onclick="openImportModal()">👤 Add People</button>
     <button class="btn btn-primary btn-sm" onclick="exportTeam()">Export All</button>
@@ -597,32 +648,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 // ═══════════════════════════════════════
 // DATA
 // ═══════════════════════════════════════
-const TEAM = [
-  { id:0, name:'Maya Rodriguez', initials:'MR', role:'Engineer', level:'L4', avatar:{bg:'#dbeafe',color:'#2563eb'},
-    auto:{ ai_tokens:{val:4820000,display:'4.8M',label:'AI Tokens',source:'Claude API'}, commits:{val:94,display:'94',label:'Commits (30d)',source:'GitHub'}, prs:{val:22,display:'22',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:1.4,display:'1.4d',label:'Cycle Time',source:'GitHub'}, jira:{val:47,display:'47pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:0.8,display:'0.8%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:4.5,ownership:4.8,feedback:4.2,growth:4.6,communication:4.4}, trend:{ai_tokens:[2.1,3.0,3.8,4.8]}, notes:'', override:null },
-  { id:1, name:'Alex Kim', initials:'AK', role:'Engineer', level:'L3', avatar:{bg:'#ede9fe',color:'#7c3aed'},
-    auto:{ ai_tokens:{val:3210000,display:'3.2M',label:'AI Tokens',source:'Claude API'}, commits:{val:71,display:'71',label:'Commits (30d)',source:'GitHub'}, prs:{val:17,display:'17',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:2.1,display:'2.1d',label:'Cycle Time',source:'GitHub'}, jira:{val:36,display:'36pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:1.2,display:'1.2%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:4.0,ownership:3.8,feedback:3.5,growth:4.0,communication:3.8}, trend:{ai_tokens:[3.5,3.2,3.1,3.2]}, notes:'', override:null },
-  { id:2, name:'Jordan Taylor', initials:'JT', role:'QA', level:'L2', avatar:{bg:'#dcfce7',color:'#16a34a'},
-    auto:{ ai_tokens:{val:980000,display:'980K',label:'AI Tokens',source:'Claude API'}, commits:{val:28,display:'28',label:'Commits (30d)',source:'GitHub'}, prs:{val:8,display:'8',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:3.8,display:'3.8d',label:'Cycle Time',source:'GitHub'}, jira:{val:19,display:'19pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:2.1,display:'2.1%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:3.2,ownership:2.8,feedback:3.0,growth:3.2,communication:3.5}, trend:{ai_tokens:[1.8,1.5,1.2,0.98]}, notes:'', override:null },
-  { id:3, name:'Sam Park', initials:'SP', role:'QA Lead', level:'L5', avatar:{bg:'#fef3c7',color:'#d97706'},
-    auto:{ ai_tokens:{val:5600000,display:'5.6M',label:'AI Tokens',source:'Claude API'}, commits:{val:58,display:'58',label:'Commits (30d)',source:'GitHub'}, prs:{val:14,display:'14',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:1.9,display:'1.9d',label:'Cycle Time',source:'GitHub'}, jira:{val:52,display:'52pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:0.5,display:'0.5%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:4.8,ownership:4.6,feedback:4.5,growth:4.3,communication:4.7}, trend:{ai_tokens:[4.0,4.5,5.1,5.6]}, notes:'', override:null },
-  { id:4, name:'Lee Chen', initials:'LC', role:'Eng Manager', level:'M2', avatar:{bg:'#fce7f3',color:'#be185d'},
-    auto:{ ai_tokens:{val:2100000,display:'2.1M',label:'AI Tokens',source:'Claude API'}, commits:{val:19,display:'19',label:'Commits (30d)',source:'GitHub'}, prs:{val:6,display:'6',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:2.8,display:'2.8d',label:'Cycle Time',source:'GitHub'}, jira:{val:28,display:'28pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:1.5,display:'1.5%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:4.2,ownership:4.0,feedback:4.1,growth:3.8,communication:4.4}, trend:{ai_tokens:[2.8,2.5,2.2,2.1]}, notes:'', override:null },
-  { id:5, name:'Priya Nair', initials:'PN', role:'Engineer', level:'L3', avatar:{bg:'#f0fdf4',color:'#15803d'},
-    auto:{ ai_tokens:{val:420000,display:'420K',label:'AI Tokens',source:'Claude API'}, commits:{val:31,display:'31',label:'Commits (30d)',source:'GitHub'}, prs:{val:9,display:'9',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:4.2,display:'4.2d',label:'Cycle Time',source:'GitHub'}, jira:{val:21,display:'21pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:3.4,display:'3.4%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:2.8,ownership:2.5,feedback:2.6,growth:2.4,communication:2.9}, trend:{ai_tokens:[1.2,0.8,0.5,0.42]}, notes:'', override:null },
-  { id:6, name:'Omar Hassan', initials:'OH', role:'Engineer', level:'L2', avatar:{bg:'#fff7ed',color:'#c2410c'},
-    auto:{ ai_tokens:{val:190000,display:'190K',label:'AI Tokens',source:'Claude API'}, commits:{val:18,display:'18',label:'Commits (30d)',source:'GitHub'}, prs:{val:4,display:'4',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:5.9,display:'5.9d',label:'Cycle Time',source:'GitHub'}, jira:{val:12,display:'12pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:4.8,display:'4.8%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:2.2,ownership:2.0,feedback:2.4,growth:2.1,communication:2.3}, trend:{ai_tokens:[0.6,0.4,0.25,0.19]}, notes:'', override:null },
-  { id:7, name:'Sofia Reyes', initials:'SR', role:'Engineer', level:'L4', avatar:{bg:'#eff6ff',color:'#1d4ed8'},
-    auto:{ ai_tokens:{val:3980000,display:'3.9M',label:'AI Tokens',source:'Claude API'}, commits:{val:82,display:'82',label:'Commits (30d)',source:'GitHub'}, prs:{val:19,display:'19',label:'PRs Merged',source:'GitHub'}, cycle_time:{val:1.7,display:'1.7d',label:'Cycle Time',source:'GitHub'}, jira:{val:44,display:'44pts',label:'Jira Velocity',source:'Jira'}, bug_rate:{val:0.9,display:'0.9%',label:'Bug Rate',source:'GitHub'} },
-    qual:{collaboration:4.3,ownership:4.5,feedback:4.0,growth:4.4,communication:4.2}, trend:{ai_tokens:[2.5,3.0,3.5,3.9]}, notes:'', override:null },
-];
+const TEAM = [];
 
 const RANGES = {
   ai_tokens:{min:0,max:6000000,higher:true},commits:{min:0,max:100,higher:true},
@@ -746,11 +772,13 @@ function renderTeam(){
 function renderTable(){
   const sorted=getSorted(),cutSet=getCutSet();
   const tbl=document.getElementById('tableEl');
+  if(TEAM.length===0){tbl.querySelector('thead').innerHTML='';tbl.querySelector('tbody').innerHTML=`<tr><td colspan="13" style="text-align:center;padding:48px 24px;color:var(--text3)"><div style="font-size:28px;margin-bottom:10px">👤</div><div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">No engineers yet</div><div style="font-size:13px;margin-bottom:16px">Import your team via CSV, HRIS, or add manually</div><button class="btn btn-primary" onclick="openImportModal()">👤 Add People</button></td></tr>`;return}
+  if(TEAM.length===0){tbl.querySelector('thead').innerHTML='';tbl.querySelector('tbody').innerHTML=`<tr><td colspan="12" style="padding:48px;text-align:center;color:var(--text3)"><div style="font-size:28px;margin-bottom:10px">👤</div><div style="font-size:14px;font-weight:600;margin-bottom:6px">No engineers yet</div><div style="font-size:13px">Click <strong>👤 Add People</strong> in the nav to import your team via CSV, HRIS, or manually.</div></td></tr>`;return}
   tbl.querySelector('thead').innerHTML=`<tr>
     <th>Name</th><th>Score</th><th>Decision</th>
     <th style="color:var(--ai)">🤖 AI Tokens</th><th>Trend</th>
     <th>Commits</th><th>PRs</th><th>Cycle Time</th><th>Jira</th>
-    <th>Collab</th><th>Ownership</th><th>Flag</th>
+    <th>Collab</th><th>Ownership</th><th>Flag</th><th></th>
   </tr>`;
   tbl.querySelector('tbody').innerHTML=sorted.map(emp=>{
     const sc=overallScore(emp);
@@ -777,6 +805,9 @@ function renderTable(){
       <td style="font-family:var(--mono)">${emp.qual.ownership.toFixed(1)}</td>
       <td onclick="event.stopPropagation();toggleManualCut(${emp.id})">
         <button class="btn btn-sm ${manual?'btn-danger':'btn-secondary'}" style="padding:3px 8px;font-size:11px">${manual?'✕ Flagged':'+ Flag'}</button>
+      </td>
+      <td onclick="event.stopPropagation();deleteEmployee(${emp.id})">
+        <button class="btn btn-sm btn-secondary" style="padding:3px 8px;font-size:11px;color:var(--text3)" title="Remove from team">🗑</button>
       </td>
     </tr>`;
   }).join('');
@@ -878,15 +909,20 @@ function openDrawer(id){
       <div class="section-head">📝 Notes</div>
       <textarea style="width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:var(--rs);padding:10px;font-family:var(--font);font-size:13px;outline:none;min-height:80px;resize:vertical" oninput="TEAM.find(e=>e.id===${id}).notes=this.value">${emp.notes}</textarea>
     </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn btn-secondary btn-sm" onclick="exportSingle(${id})">Export CSV</button>
-      <button class="btn btn-primary btn-sm" onclick="closeDrawer()">Done</button>
+    <div style="display:flex;gap:8px;justify-content:space-between;align-items:center">
+      <button class="btn btn-danger btn-sm" onclick="deleteEmp(${id})">🗑 Remove</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="exportSingle(${id})">Export CSV</button>
+        <button class="btn btn-primary btn-sm" onclick="closeDrawer()">Done</button>
+      </div>
     </div>`;
   document.getElementById('drawerOverlay').classList.add('open');
   document.getElementById('drawer').classList.add('open');
 }
 function closeDrawer(){document.getElementById('drawerOverlay').classList.remove('open');document.getElementById('drawer').classList.remove('open');renderTeam()}
 function setOvr(id,val){const emp=TEAM.find(e=>e.id===id);emp.override=emp.override===val?null:val;openDrawer(id)}
+function deleteEmp(id){if(!confirm('Remove this person from the team?'))return;const idx=TEAM.findIndex(e=>e.id===id);if(idx>-1)TEAM.splice(idx,1);manualCuts.delete(id);closeDrawer();showToast('✓ Removed from team')}
+function deleteEmployee(id){if(!confirm('Remove this person from the team?'))return;const idx=TEAM.findIndex(e=>e.id===id);if(idx>-1)TEAM.splice(idx,1);manualCuts.delete(id);renderTeam();showToast('✓ Removed from team')}
 
 // ═══════════════════════════════════════
 // ALERTS PAGE
@@ -1093,6 +1129,7 @@ function connectInt(key){showToast(`Connecting to ${key}...`);setTimeout(()=>sho
 // ═══════════════════════════════════════
 // EXPORT
 // ═══════════════════════════════════════
+function deleteEmp(id){if(!confirm('Remove this person from the team?'))return;const idx=TEAM.findIndex(e=>e.id===id);if(idx>=0)TEAM.splice(idx,1);manualCuts.delete(id);closeDrawer();renderTeam();showToast('✓ Removed from team')}
 function exportSingle(id){const emp=TEAM.find(e=>e.id===id);const sc=overallScore(emp);downloadCSV(['Name','Role','Level','Score','Recommendation','AI Tokens','Commits','PRs','Cycle Time','Jira','Bug Rate','Notes'],[[emp.name,emp.role,emp.level,sc,recommendation(sc,emp.override),emp.auto.ai_tokens.display,emp.auto.commits.display,emp.auto.prs.display,emp.auto.cycle_time.display,emp.auto.jira.display,emp.auto.bug_rate.display,emp.notes]],`eval_${emp.name.replace(/\s/g,'_')}.csv`);showToast('✓ Exported')}
 function exportTeam(){const h=['Name','Role','Level','Score','Recommendation','AI Tokens','Commits','PRs','Cycle Time','Jira','Bug Rate','Notes'];downloadCSV(h,TEAM.map(emp=>{const sc=overallScore(emp);return[emp.name,emp.role,emp.level,sc,recommendation(sc,emp.override),emp.auto.ai_tokens.display,emp.auto.commits.display,emp.auto.prs.display,emp.auto.cycle_time.display,emp.auto.jira.display,emp.auto.bug_rate.display,emp.notes]}),'team_calibration.csv');showToast('✓ Team export downloaded')}
 function downloadCSV(h,r,f){const csv=[h,...r].map(row=>row.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:f});a.click()}
@@ -1105,8 +1142,48 @@ function showPage(p){document.querySelectorAll('.page').forEach(el=>el.classList
 // TOAST
 function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800)}
 
-// INIT
-renderTeam();updateAlertBadge();
+// ═══════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════
+const SESSION_KEY='ws_cal_user';
+
+function attemptLogin(){
+  const email=document.getElementById('loginEmail').value.trim().toLowerCase();
+  const errEl=document.getElementById('loginError');
+  const inputEl=document.getElementById('loginEmail');
+  if(!email){errEl.textContent='Please enter your email.';inputEl.classList.add('error');setTimeout(()=>inputEl.classList.remove('error'),400);return}
+  if(!email.endsWith('@workstream.is')){errEl.textContent='Access restricted to @workstream.is email addresses.';inputEl.classList.add('error');setTimeout(()=>inputEl.classList.remove('error'),400);return}
+  errEl.textContent='';
+  sessionStorage.setItem(SESSION_KEY,email);
+  grantAccess(email);
+}
+
+function grantAccess(email){
+  document.getElementById('loginScreen').classList.add('hidden');
+  const parts=email.split('@')[0].split('.');
+  const firstName=parts[0]?parts[0].charAt(0).toUpperCase()+parts[0].slice(1):'';
+  const lastName=parts[1]?parts[1].charAt(0).toUpperCase()+parts[1].slice(1):'';
+  const displayName=lastName?`${firstName} ${lastName}`:firstName;
+  const initials=(firstName[0]||'')+(lastName[0]||'');
+  document.getElementById('userInitials').textContent=initials.toUpperCase()||email[0].toUpperCase();
+  document.getElementById('userName').textContent=displayName||email.split('@')[0];
+  renderTeam();updateAlertBadge();
+}
+
+function signOut(){
+  if(!confirm('Sign out?'))return;
+  sessionStorage.removeItem(SESSION_KEY);
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginEmail').value='';
+  document.getElementById('loginError').textContent='';
+}
+
+// INIT — check session first
+(function(){
+  const saved=sessionStorage.getItem(SESSION_KEY);
+  if(saved&&saved.endsWith('@workstream.is')){grantAccess(saved)}
+  // else login screen stays visible, app doesn't init until login
+})();
 </script>
 </body>
 </html>
