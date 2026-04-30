@@ -404,7 +404,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
       <option value="cycle_time">Sort: Cycle Time</option>
       <option value="collaboration">Sort: Collaboration</option>
     </select>
-    <span style="font-size:12px;color:var(--text2);margin-left:auto" id="teamCount"></span>
+    <span style="font-size:12px;color:var(--text2)" id="teamCount"></span>
+    <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="bulkDeleteAll()" id="bulkDeleteBtn" title="Remove all engineers from the team">🗑 Delete All</button>
   </div>
 
   <div id="view-table"><table class="data-table" id="tableEl"><thead></thead><tbody></tbody></table></div>
@@ -1099,19 +1100,79 @@ function handleDrop(e){e.preventDefault();handleCSVFile(e.dataTransfer.files[0])
 function handleCSVFile(file){if(!file)return;const r=new FileReader();r.onload=e=>parseCSV(e.target.result);r.readAsText(file)}
 function parseCSV(text){
   const lines=text.trim().split('\n').map(l=>l.split(',').map(c=>c.trim().replace(/^"|"$/g,'')));
-  const h=lines[0].map(x=>x.toLowerCase());
-  const ni=h.findIndex(x=>x.includes('name')),ri=h.findIndex(x=>x.includes('role')||x.includes('title')),li=h.findIndex(x=>x.includes('level')),di=h.findIndex(x=>x.includes('dept')),mi=h.findIndex(x=>x.includes('manager'));
-  if(ni<0||ri<0){showToast('⚠ CSV needs Name and Role columns');return}
-  csvRows=lines.slice(1).filter(r=>r[ni]).map(r=>({name:r[ni],role:r[ri]||'Engineer',level:li>=0?r[li]||'L3':'L3',dept:di>=0?r[di]||'Engineering':'Engineering',manager:mi>=0?r[mi]||'':''}));
+  const h=lines[0].map(x=>x.toLowerCase().trim());
+  const col=(matches)=>{for(const m of matches){const i=h.findIndex(x=>x.includes(m));if(i>=0)return i;}return -1;};
+  const ni=col(['name']),ri=col(['role','title']),li=col(['level','grade']),di=col(['dept','department']),mi=col(['manager','mgr']);
+  const commitsI=col(['commits_30d','commits']),claudeI=col(['ai_tokens_claude','claude_tokens']),cursorI=col(['cursor_tokens','cursor_spend']),jiraI=col(['jira_done','jira']),prsI=col(['prs_30d','prs']),cycleI=col(['cycle_time']),bugI=col(['bug_rate']);
+  const qOutputI=col(['qual_output','output_score']),qCollabI=col(['qual_collab','collaboration']),qOwnI=col(['qual_ownership','ownership_score']),qGrowthI=col(['qual_growth','growth_score']),qQualI=col(['qual_quality','quality_score']);
+  const tierI=col(['tier']),notesI=col(['notes']);
+  if(ni<0){showToast('⚠ CSV needs a Name column');return}
+  const num=(r,i)=>i>=0&&r[i]?parseFloat(r[i].replace(/[^0-9.]/g,''))||0:0;
+  csvRows=lines.slice(1).filter(r=>r[ni]&&r[ni].trim()).map(r=>({
+    name:r[ni],
+    role:ri>=0?r[ri]||'Engineer':'Engineer',
+    level:li>=0?r[li]||'L3':'L3',
+    dept:di>=0?r[di]||'Engineering':'Engineering',
+    manager:mi>=0?r[mi]||'':'',
+    commits:num(r,commitsI),
+    ai_tokens:num(r,claudeI),
+    cursor_tokens:num(r,cursorI),
+    jira_done:num(r,jiraI),
+    prs:num(r,prsI),
+    cycle_time:num(r,cycleI),
+    bug_rate:num(r,bugI),
+    qual_output:num(r,qOutputI),
+    qual_collab:num(r,qCollabI),
+    qual_ownership:num(r,qOwnI),
+    qual_growth:num(r,qGrowthI),
+    qual_quality:num(r,qQualI),
+    tier:tierI>=0?r[tierI]||'':'',
+    notes:notesI>=0?r[notesI]||'':'',
+  }));
   const t=document.getElementById('csv-ptable');
-  document.getElementById('csv-plabel').textContent=`${csvRows.length} employees found`;
-  t.innerHTML=`<thead><tr>${['Name','Role','Level','Dept','Mgr'].map(h=>`<th style="padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);background:var(--bg);text-align:left;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead><tbody>${csvRows.map(r=>`<tr>${[r.name,r.role,r.level,r.dept,r.manager].map(v=>`<td style="padding:7px 10px;font-size:12px;border-bottom:1px solid var(--border)">${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
+  const aiDetected=claudeI>=0||cursorI>=0;
+  document.getElementById('csv-plabel').textContent=`${csvRows.length} employees found${aiDetected?' · AI token data detected ✓':''}`;
+  t.innerHTML=`<thead><tr>${['Name','Role','Level','AI Tokens','Commits','Jira','Collab','Tier'].map(h=>`<th style="padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);background:var(--bg);text-align:left;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
+  <tbody>${csvRows.map(r=>{const ai=(r.ai_tokens+r.cursor_tokens);const aiDisp=ai>=1000000?(ai/1000000).toFixed(1)+'M':ai>=1000?(ai/1000).toFixed(0)+'K':ai>0?String(ai):'—';return`<tr>${[r.name,r.role,r.level,aiDisp,r.commits||'—',r.jira_done||'—',r.qual_collab||'—',r.tier].map(v=>`<td style="padding:7px 10px;font-size:12px;border-bottom:1px solid var(--border)">${v}</td>`).join('')}</tr>`}).join('')}</tbody>`;
   document.getElementById('csv-preview').style.display='block';
   document.getElementById('csv-confirm').disabled=csvRows.length===0;
 }
-function confirmCSV(){csvRows.forEach(r=>addEmp(r.name,r.role,r.level,r.dept,r.manager));showToast(`✓ ${csvRows.length} employees added`);closeImportModal();renderTeam()}
-function dlTemplate(){downloadCSV(['Name','Role','Level','Department','Manager'],[['Jordan Lee','Engineer','L3','Engineering','Sarah L.'],['Taylor Kim','QA','L2','Engineering','Sarah L.']],'employee_import_template.csv');showToast('✓ Template downloaded')}
-function selHRIS(key,el){document.querySelectorAll('.hris-opt').forEach(o=>{o.style.borderColor='var(--border)';o.style.background=''});el.style.borderColor='var(--accent)';el.style.background='var(--accent-light)';selHRISKey=key;document.getElementById('hris-api-lbl').textContent=`${key} API Key`;document.getElementById('hris-wrap').style.display='block';document.getElementById('hris-confirm').disabled=false}
+function confirmCSV(){csvRows.forEach(r=>{
+  const id=TEAM.length?Math.max(...TEAM.map(e=>e.id))+1:0;
+  const ini=r.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+  const aiTokens=(r.ai_tokens||0)+(r.cursor_tokens||0);
+  const fmtTokens=aiTokens>=1000000?(aiTokens/1000000).toFixed(1)+'M':aiTokens>=1000?(aiTokens/1000).toFixed(0)+'K':aiTokens>0?String(aiTokens):'—';
+  const fmtCommits=r.commits>0?String(r.commits):'—';
+  const fmtJira=r.jira_done>0?r.jira_done+'pts':'—';
+  const fmtBugRate=r.bug_rate>0?r.bug_rate.toFixed(1)+'%':'—';
+  // Map scored columns to qualitative sliders (1-5 scale, scores already 1-5)
+  const collab=Math.min(5,Math.max(1,r.qual_collab||3));
+  const ownership=Math.min(5,Math.max(1,r.qual_ownership||3));
+  const growth=Math.min(5,Math.max(1,r.qual_growth||3));
+  const quality=Math.min(5,Math.max(1,r.qual_quality||3));
+  TEAM.push({
+    id,name:r.name,initials:ini,role:r.role,level:r.level,
+    avatar:AVATAR_COLORS[id%AVATAR_COLORS.length],
+    auto:{
+      ai_tokens:{val:aiTokens,display:fmtTokens,label:'AI Tokens',source:'Claude+Cursor'},
+      commits:{val:r.commits||0,display:fmtCommits,label:'Commits (30d)',source:'GitHub'},
+      prs:{val:r.prs||0,display:r.prs>0?String(r.prs):'—',label:'PRs Merged',source:'GitHub'},
+      cycle_time:{val:r.cycle_time||0,display:r.cycle_time>0?r.cycle_time.toFixed(1)+'d':'—',label:'Cycle Time',source:'GitHub'},
+      jira:{val:r.jira_done||0,display:fmtJira,label:'Jira Velocity',source:'Jira'},
+      bug_rate:{val:r.bug_rate||0,display:fmtBugRate,label:'Bug Rate',source:'GitHub'},
+    },
+    qual:{collaboration:collab,ownership,feedback:quality,growth,communication:Math.min(5,Math.max(1,r.qual_output||3))},
+    trend:{ai_tokens:[0,0,0,aiTokens/1000000]},
+    notes:r.notes||'',override:null,dept:r.dept,manager:r.manager,tier:r.tier||''
+  });
+});showToast(`✓ ${csvRows.length} employees added`);closeImportModal();renderTeam()}
+
+function dlTemplate(){
+  const h=['Name','Role','Level','Department','Manager','commits_30d','ai_tokens_claude','cursor_tokens','jira_done','prs_30d','cycle_time_days','bug_rate_pct','qual_output','qual_collab','qual_ownership','qual_growth','qual_quality','tier','notes'];
+  const ex=[['Andrew Wong','Engineer','L4','Platform','Fu Zhang',59,0,514890,16,4,1.4,0.8,5,5,5,5,4,'Tier 1','']];
+  downloadCSV(h,ex,'ws_engineer_import_template.csv');showToast('✓ Template downloaded')}
+
+function addEmp(name,role,level,dept,manager){const id=TEAM.length?Math.max(...TEAM.map(e=>e.id))+1:0;const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);TEAM.push({id,name,initials:ini,role,level,avatar:AVATAR_COLORS[id%AVATAR_COLORS.length],auto:{ai_tokens:{val:0,display:'—',label:'AI Tokens',source:'Claude+Cursor'},commits:{val:0,display:'—',label:'Commits (30d)',source:'GitHub'},prs:{val:0,display:'—',label:'PRs Merged',source:'GitHub'},cycle_time:{val:0,display:'—',label:'Cycle Time',source:'GitHub'},jira:{val:0,display:'—',label:'Jira Velocity',source:'Jira'},bug_rate:{val:0,display:'—',label:'Bug Rate',source:'GitHub'}},qual:{collaboration:3,ownership:3,feedback:3,growth:3,communication:3},trend:{ai_tokens:[0,0,0,0]},notes:'',override:null,dept,manager})}(key,el){document.querySelectorAll('.hris-opt').forEach(o=>{o.style.borderColor='var(--border)';o.style.background=''});el.style.borderColor='var(--accent)';el.style.background='var(--accent-light)';selHRISKey=key;document.getElementById('hris-api-lbl').textContent=`${key} API Key`;document.getElementById('hris-wrap').style.display='block';document.getElementById('hris-confirm').disabled=false}
 function confirmHRIS(){if(!selHRISKey)return;const dept=document.getElementById('hris-dept').value||'Engineering';showToast(`🔄 Fetching from ${selHRISKey}...`);setTimeout(()=>{[{name:'Casey Morgan',role:'Engineer',level:'L3'},{name:'Riley Nguyen',role:'Engineer',level:'L2'},{name:'Drew Patel',role:'QA',level:'L2'}].forEach(e=>addEmp(e.name,e.role,e.level,dept,''));showToast(`✓ 3 employees imported from ${selHRISKey}`);closeImportModal();renderTeam()},1400)}
 function queueManual(){const name=document.getElementById('man-name').value.trim();if(!name){showToast('⚠ Name required');return}manualQueue.push({name,role:document.getElementById('man-role').value,level:document.getElementById('man-level').value,dept:document.getElementById('man-dept').value||'Engineering',manager:document.getElementById('man-manager').value});document.getElementById('man-name').value='';document.getElementById('man-queue').style.display='block';document.getElementById('man-queue-list').innerHTML=manualQueue.map((e,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 10px;background:var(--bg);border-radius:6px;font-size:12px"><span><strong>${e.name}</strong> — ${e.role} · ${e.level}</span></div>`).join('');showToast(`✓ ${name} queued`)}
 function confirmManual(){const name=document.getElementById('man-name').value.trim();if(name)manualQueue.push({name,role:document.getElementById('man-role').value,level:document.getElementById('man-level').value,dept:document.getElementById('man-dept').value||'Engineering',manager:document.getElementById('man-manager').value});if(!manualQueue.length){showToast('⚠ Enter at least one person');return}manualQueue.forEach(e=>addEmp(e.name,e.role,e.level,e.dept,e.manager));showToast(`✓ ${manualQueue.length} added`);closeImportModal();renderTeam()}
@@ -1130,6 +1191,7 @@ function connectInt(key){showToast(`Connecting to ${key}...`);setTimeout(()=>sho
 // EXPORT
 // ═══════════════════════════════════════
 function deleteEmp(id){if(!confirm('Remove this person from the team?'))return;const idx=TEAM.findIndex(e=>e.id===id);if(idx>=0)TEAM.splice(idx,1);manualCuts.delete(id);closeDrawer();renderTeam();showToast('✓ Removed from team')}
+function bulkDeleteAll(){if(!TEAM.length){showToast('No engineers to delete');return}if(!confirm(`Remove all ${TEAM.length} engineers? This cannot be undone.`))return;TEAM.length=0;manualCuts.clear();renderTeam();showToast('✓ All engineers removed')}
 function exportSingle(id){const emp=TEAM.find(e=>e.id===id);const sc=overallScore(emp);downloadCSV(['Name','Role','Level','Score','Recommendation','AI Tokens','Commits','PRs','Cycle Time','Jira','Bug Rate','Notes'],[[emp.name,emp.role,emp.level,sc,recommendation(sc,emp.override),emp.auto.ai_tokens.display,emp.auto.commits.display,emp.auto.prs.display,emp.auto.cycle_time.display,emp.auto.jira.display,emp.auto.bug_rate.display,emp.notes]],`eval_${emp.name.replace(/\s/g,'_')}.csv`);showToast('✓ Exported')}
 function exportTeam(){const h=['Name','Role','Level','Score','Recommendation','AI Tokens','Commits','PRs','Cycle Time','Jira','Bug Rate','Notes'];downloadCSV(h,TEAM.map(emp=>{const sc=overallScore(emp);return[emp.name,emp.role,emp.level,sc,recommendation(sc,emp.override),emp.auto.ai_tokens.display,emp.auto.commits.display,emp.auto.prs.display,emp.auto.cycle_time.display,emp.auto.jira.display,emp.auto.bug_rate.display,emp.notes]}),'team_calibration.csv');showToast('✓ Team export downloaded')}
 function downloadCSV(h,r,f){const csv=[h,...r].map(row=>row.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');const a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:f});a.click()}
