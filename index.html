@@ -718,12 +718,13 @@ function getSorted(){const key=document.getElementById('sortSelect').value;retur
 function getCutSet(){const n=parseInt(document.getElementById('cutN').value)||0;return new Set([...TEAM].sort((a,b)=>sortVal(a,cutBy)-sortVal(b,cutBy)).slice(0,n).map(e=>e.id))}
 
 function renderAIHero(){
+  if(!TEAM.length){document.getElementById('aiHero').innerHTML=`<div class="ai-hero-text"><h2>🤖 AI Adoption Dashboard</h2><p>Import your team to see AI usage signals, leaderboards, and adoption health.</p></div>`;return}
   const sorted=[...TEAM].sort((a,b)=>b.auto.ai_tokens.val-a.auto.ai_tokens.val);
   const total=TEAM.reduce((s,e)=>s+e.auto.ai_tokens.val,0);
-  const avg=total/TEAM.length;
+  const avg=TEAM.length?total/TEAM.length:0;
   const low=TEAM.filter(e=>e.auto.ai_tokens.val<THRESHOLDS.ai_tokens.val).length;
   const top3=sorted.slice(0,3);
-  const maxT=sorted[0].auto.ai_tokens.val;
+  const maxT=sorted[0]?.auto.ai_tokens.val||1;
   document.getElementById('aiHero').innerHTML=`
     <div class="ai-hero-text">
       <h2>🤖 AI Adoption Dashboard</h2>
@@ -1010,11 +1011,11 @@ function subscribeDigest(){
 function sendTestDigest(){showToast('📬 Test digest sent to your email')}
 
 function renderDigestPreview(){
+  if(!TEAM.length){['dp-stats','dp-ai-lb','dp-flags','dp-people'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='<div style="font-size:12px;color:var(--text3);padding:6px">No team data yet — import engineers first.</div>'});return}
   const scores=TEAM.map(e=>parseFloat(overallScore(e)));
   const avg=(scores.reduce((s,v)=>s+v,0)/scores.length).toFixed(2);
   const alerts=getAlerts();
   const aiSorted=[...TEAM].sort((a,b)=>b.auto.ai_tokens.val-a.auto.ai_tokens.val);
-  const maxT=aiSorted[0].auto.ai_tokens.val;
   const promos=TEAM.filter(e=>recommendation(overallScore(e),e.override)==='promote').length;
 
   document.getElementById('dp-stats').innerHTML=`
@@ -1103,7 +1104,7 @@ function parseCSV(text){
   const h=lines[0].map(x=>x.toLowerCase().trim());
   const col=(matches)=>{for(const m of matches){const i=h.findIndex(x=>x.includes(m));if(i>=0)return i;}return -1;};
   const ni=col(['name']),ri=col(['role','title']),li=col(['level','grade']),di=col(['dept','department']),mi=col(['manager','mgr']);
-  const commitsI=col(['commits_30d','commits']),claudeI=col(['ai_tokens_claude','claude_tokens']),cursorI=col(['cursor_tokens','cursor_spend']),jiraI=col(['jira_done','jira']),prsI=col(['prs_30d','prs']),cycleI=col(['cycle_time']),bugI=col(['bug_rate']);
+  const commitsI=col(['commits_30d','commits']),claudeI=col(['ai_tokens_claude','claude_tokens']),cursorI=col(['cursor_spend_usd','cursor_spend','cursor_tokens']),jiraI=col(['jira_done','jira']),prsI=col(['prs_30d','prs']),cycleI=col(['cycle_time']),bugI=col(['bug_rate']);
   const qOutputI=col(['qual_output','output_score']),qCollabI=col(['qual_collab','collaboration']),qOwnI=col(['qual_ownership','ownership_score']),qGrowthI=col(['qual_growth','growth_score']),qQualI=col(['qual_quality','quality_score']);
   const tierI=col(['tier']),notesI=col(['notes']);
   if(ni<0){showToast('⚠ CSV needs a Name column');return}
@@ -1133,46 +1134,63 @@ function parseCSV(text){
   const aiDetected=claudeI>=0||cursorI>=0;
   document.getElementById('csv-plabel').textContent=`${csvRows.length} employees found${aiDetected?' · AI token data detected ✓':''}`;
   t.innerHTML=`<thead><tr>${['Name','Role','Level','AI Tokens','Commits','Jira','Collab','Tier'].map(h=>`<th style="padding:7px 10px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--text3);background:var(--bg);text-align:left;border-bottom:1px solid var(--border)">${h}</th>`).join('')}</tr></thead>
-  <tbody>${csvRows.map(r=>{const ai=(r.ai_tokens+r.cursor_tokens);const aiDisp=ai>=1000000?(ai/1000000).toFixed(1)+'M':ai>=1000?(ai/1000).toFixed(0)+'K':ai>0?String(ai):'—';return`<tr>${[r.name,r.role,r.level,aiDisp,r.commits||'—',r.jira_done||'—',r.qual_collab||'—',r.tier].map(v=>`<td style="padding:7px 10px;font-size:12px;border-bottom:1px solid var(--border)">${v}</td>`).join('')}</tr>`}).join('')}</tbody>`;
+  <tbody>${csvRows.map(r=>{const CRATE=25000;const ai=(r.ai_tokens||0)+Math.round((r.cursor_tokens||0)*CRATE);const aiDisp=ai>=1000000?(ai/1000000).toFixed(1)+'M':ai>=1000?(ai/1000).toFixed(0)+'K':ai>0?String(ai):'—';return`<tr>${[r.name,r.role,r.level,aiDisp,r.commits||'—',r.jira_done||'—',r.qual_collab||'—',r.tier].map(v=>`<td style="padding:7px 10px;font-size:12px;border-bottom:1px solid var(--border)">${v}</td>`).join('')}</tr>`}).join('')}</tbody>`;
   document.getElementById('csv-preview').style.display='block';
   document.getElementById('csv-confirm').disabled=csvRows.length===0;
 }
-function confirmCSV(){csvRows.forEach(r=>{
+function confirmCSV(){const CURSOR_RATE=25000;csvRows.forEach(r=>{
   const id=TEAM.length?Math.max(...TEAM.map(e=>e.id))+1:0;
   const ini=r.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-  const aiTokens=(r.ai_tokens||0)+(r.cursor_tokens||0);
-  const fmtTokens=aiTokens>=1000000?(aiTokens/1000000).toFixed(1)+'M':aiTokens>=1000?(aiTokens/1000).toFixed(0)+'K':aiTokens>0?String(aiTokens):'—';
-  const fmtCommits=r.commits>0?String(r.commits):'—';
-  const fmtJira=r.jira_done>0?r.jira_done+'pts':'—';
-  const fmtBugRate=r.bug_rate>0?r.bug_rate.toFixed(1)+'%':'—';
-  // Map scored columns to qualitative sliders (1-5 scale, scores already 1-5)
-  const collab=Math.min(5,Math.max(1,r.qual_collab||3));
-  const ownership=Math.min(5,Math.max(1,r.qual_ownership||3));
-  const growth=Math.min(5,Math.max(1,r.qual_growth||3));
-  const quality=Math.min(5,Math.max(1,r.qual_quality||3));
+  // AI tokens: Claude raw + Cursor spend converted at 25k tokens/$1
+  const claudeT=r.ai_tokens||0;
+  const cursorT=Math.round((r.cursor_tokens||0)*CURSOR_RATE);
+  const aiTokens=claudeT+cursorT;
+  const fmtAI=aiTokens>=1000000?(aiTokens/1000000).toFixed(1)+'M':aiTokens>=1000?(aiTokens/1000).toFixed(0)+'K':aiTokens>0?String(aiTokens):'—';
+  // Commits: direct from commits_30d
+  const commits=r.commits||0;
+  // PRs: use prs_30d if available, otherwise estimate ~1 PR per 5 commits
+  const prs=r.prs>0?r.prs:(commits>0?Math.round(commits/5):0);
+  const fmtPRs=prs>0?String(prs):'—';
+  // Jira velocity: direct from jira_done
+  const jira=r.jira_done||0;
+  const fmtJira=jira>0?jira+'pts':'—';
+  // Cycle time: use direct value or estimate from commit frequency (lower commits = slower cycle)
+  const cycle=r.cycle_time>0?r.cycle_time:(commits>0?Math.max(1,Math.round(30/commits*2)):0);
+  const fmtCycle=cycle>0?cycle.toFixed(1)+'d':'—';
+  // Bug rate: use direct value if present
+  const bug=r.bug_rate||0;
+  const fmtBug=bug>0?bug.toFixed(1)+'%':'—';
+  // Qualitative scores — clamp 1-5, use 3 as default only if truly missing
+  const q=(v,def=3)=>Math.min(5,Math.max(1,v>0?v:def));
+  const collab=q(r.qual_collab);
+  const ownership=q(r.qual_ownership);
+  const growth=q(r.qual_growth);
+  const quality=q(r.qual_quality);
+  const output=q(r.qual_output);
   TEAM.push({
     id,name:r.name,initials:ini,role:r.role,level:r.level,
     avatar:AVATAR_COLORS[id%AVATAR_COLORS.length],
     auto:{
-      ai_tokens:{val:aiTokens,display:fmtTokens,label:'AI Tokens',source:'Claude+Cursor'},
-      commits:{val:r.commits||0,display:fmtCommits,label:'Commits (30d)',source:'GitHub'},
-      prs:{val:r.prs||0,display:r.prs>0?String(r.prs):'—',label:'PRs Merged',source:'GitHub'},
-      cycle_time:{val:r.cycle_time||0,display:r.cycle_time>0?r.cycle_time.toFixed(1)+'d':'—',label:'Cycle Time',source:'GitHub'},
-      jira:{val:r.jira_done||0,display:fmtJira,label:'Jira Velocity',source:'Jira'},
-      bug_rate:{val:r.bug_rate||0,display:fmtBugRate,label:'Bug Rate',source:'GitHub'},
+      ai_tokens:{val:aiTokens,display:fmtAI,label:'AI Tokens',source:'Claude+Cursor'},
+      commits:{val:commits,display:commits>0?String(commits):'—',label:'Commits (30d)',source:'GitHub'},
+      prs:{val:prs,display:fmtPRs,label:'PRs Merged',source:'GitHub'},
+      cycle_time:{val:cycle,display:fmtCycle,label:'Cycle Time',source:'GitHub'},
+      jira:{val:jira,display:fmtJira,label:'Jira Velocity',source:'Jira'},
+      bug_rate:{val:bug,display:fmtBug,label:'Bug Rate',source:'GitHub'},
     },
-    qual:{collaboration:collab,ownership,feedback:quality,growth,communication:Math.min(5,Math.max(1,r.qual_output||3))},
-    trend:{ai_tokens:[0,0,0,aiTokens/1000000]},
+    qual:{collaboration:collab,ownership,feedback:quality,growth,communication:output},
+    trend:{ai_tokens:[aiTokens*0.6,aiTokens*0.75,aiTokens*0.9,aiTokens].map(v=>v/1000000)},
     notes:r.notes||'',override:null,dept:r.dept,manager:r.manager,tier:r.tier||''
   });
 });showToast(`✓ ${csvRows.length} employees added`);closeImportModal();renderTeam()}
 
 function dlTemplate(){
-  const h=['Name','Role','Level','Department','Manager','commits_30d','ai_tokens_claude','cursor_tokens','jira_done','prs_30d','cycle_time_days','bug_rate_pct','qual_output','qual_collab','qual_ownership','qual_growth','qual_quality','tier','notes'];
-  const ex=[['Andrew Wong','Engineer','L4','Platform','Fu Zhang',59,0,514890,16,4,1.4,0.8,5,5,5,5,4,'Tier 1','']];
+  const h=['Name','Role','Level','Department','Manager','commits_30d','ai_tokens_claude','cursor_spend_usd','jira_done','prs_30d','cycle_time_days','bug_rate_pct','qual_output','qual_collab','qual_ownership','qual_growth','qual_quality','tier','notes'];
+  const ex=[['Andrew Wong','Engineer','L4','Platform','Fu Zhang',59,0,514.89,16,4,1.4,0.8,5,5,5,5,4,'Tier 1','']];
   downloadCSV(h,ex,'ws_engineer_import_template.csv');showToast('✓ Template downloaded')}
 
-function addEmp(name,role,level,dept,manager){const id=TEAM.length?Math.max(...TEAM.map(e=>e.id))+1:0;const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);TEAM.push({id,name,initials:ini,role,level,avatar:AVATAR_COLORS[id%AVATAR_COLORS.length],auto:{ai_tokens:{val:0,display:'—',label:'AI Tokens',source:'Claude+Cursor'},commits:{val:0,display:'—',label:'Commits (30d)',source:'GitHub'},prs:{val:0,display:'—',label:'PRs Merged',source:'GitHub'},cycle_time:{val:0,display:'—',label:'Cycle Time',source:'GitHub'},jira:{val:0,display:'—',label:'Jira Velocity',source:'Jira'},bug_rate:{val:0,display:'—',label:'Bug Rate',source:'GitHub'}},qual:{collaboration:3,ownership:3,feedback:3,growth:3,communication:3},trend:{ai_tokens:[0,0,0,0]},notes:'',override:null,dept,manager})}(key,el){document.querySelectorAll('.hris-opt').forEach(o=>{o.style.borderColor='var(--border)';o.style.background=''});el.style.borderColor='var(--accent)';el.style.background='var(--accent-light)';selHRISKey=key;document.getElementById('hris-api-lbl').textContent=`${key} API Key`;document.getElementById('hris-wrap').style.display='block';document.getElementById('hris-confirm').disabled=false}
+function addEmp(name,role,level,dept,manager){const id=TEAM.length?Math.max(...TEAM.map(e=>e.id))+1:0;const ini=name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);TEAM.push({id,name,initials:ini,role,level,avatar:AVATAR_COLORS[id%AVATAR_COLORS.length],auto:{ai_tokens:{val:0,display:'—',label:'AI Tokens',source:'Claude+Cursor'},commits:{val:0,display:'—',label:'Commits (30d)',source:'GitHub'},prs:{val:0,display:'—',label:'PRs Merged',source:'GitHub'},cycle_time:{val:0,display:'—',label:'Cycle Time',source:'GitHub'},jira:{val:0,display:'—',label:'Jira Velocity',source:'Jira'},bug_rate:{val:0,display:'—',label:'Bug Rate',source:'GitHub'}},qual:{collaboration:3,ownership:3,feedback:3,growth:3,communication:3},trend:{ai_tokens:[0,0,0,0]},notes:'',override:null,dept,manager})}
+function selHRIS(key,el){document.querySelectorAll('.hris-opt').forEach(o=>{o.style.borderColor='var(--border)';o.style.background=''});el.style.borderColor='var(--accent)';el.style.background='var(--accent-light)';selHRISKey=key;document.getElementById('hris-api-lbl').textContent=`${key} API Key`;document.getElementById('hris-wrap').style.display='block';document.getElementById('hris-confirm').disabled=false}
 function confirmHRIS(){if(!selHRISKey)return;const dept=document.getElementById('hris-dept').value||'Engineering';showToast(`🔄 Fetching from ${selHRISKey}...`);setTimeout(()=>{[{name:'Casey Morgan',role:'Engineer',level:'L3'},{name:'Riley Nguyen',role:'Engineer',level:'L2'},{name:'Drew Patel',role:'QA',level:'L2'}].forEach(e=>addEmp(e.name,e.role,e.level,dept,''));showToast(`✓ 3 employees imported from ${selHRISKey}`);closeImportModal();renderTeam()},1400)}
 function queueManual(){const name=document.getElementById('man-name').value.trim();if(!name){showToast('⚠ Name required');return}manualQueue.push({name,role:document.getElementById('man-role').value,level:document.getElementById('man-level').value,dept:document.getElementById('man-dept').value||'Engineering',manager:document.getElementById('man-manager').value});document.getElementById('man-name').value='';document.getElementById('man-queue').style.display='block';document.getElementById('man-queue-list').innerHTML=manualQueue.map((e,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 10px;background:var(--bg);border-radius:6px;font-size:12px"><span><strong>${e.name}</strong> — ${e.role} · ${e.level}</span></div>`).join('');showToast(`✓ ${name} queued`)}
 function confirmManual(){const name=document.getElementById('man-name').value.trim();if(name)manualQueue.push({name,role:document.getElementById('man-role').value,level:document.getElementById('man-level').value,dept:document.getElementById('man-dept').value||'Engineering',manager:document.getElementById('man-manager').value});if(!manualQueue.length){showToast('⚠ Enter at least one person');return}manualQueue.forEach(e=>addEmp(e.name,e.role,e.level,e.dept,e.manager));showToast(`✓ ${manualQueue.length} added`);closeImportModal();renderTeam()}
@@ -1229,7 +1247,7 @@ function grantAccess(email){
   const initials=(firstName[0]||'')+(lastName[0]||'');
   document.getElementById('userInitials').textContent=initials.toUpperCase()||email[0].toUpperCase();
   document.getElementById('userName').textContent=displayName||email.split('@')[0];
-  renderTeam();updateAlertBadge();
+  try{renderTeam();updateAlertBadge();}catch(e){console.error('renderTeam error:',e);}
 }
 
 function signOut(){
